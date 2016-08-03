@@ -1,0 +1,115 @@
+
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 1px solid black; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      form p {color: white;}
+      #messages { list-style-type: none; width: 40%; margin-top: 30%; padding: 0; padding-bottom: 100px; overflow: auto;}
+      #messages li { padding: 5px 10px;}
+      #messages li:nth-child(odd) { background: #eee; }
+      #onlineUsersContainer { position: fixed; right: 0; top: 0; width: 143px; height: 40%; background: #999; color: white; padding:10px;}
+      #onlineUsers {margin-left: 25px;}
+      #onlineUsers li {padding: 5px;}
+      #modalForUser {position: absolute; width: 100%; height:100vh; z-index: 5;}
+      #the-canvas {background-color: lightblue; width: 100%}
+    </style>
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- <script src="scripts/qwerty-hancock.min.js"></script>
+  <script src="scripts/synth.js"></script> -->
+
+  </head>
+  <body>
+    <canvas id="the-canvas" width="500" height="300"></canvas>
+  </div>
+    <div id="modalForUser">
+      <form id="nicknameForm">
+        <h3>What's Your Name?</h3>
+        <input id="nickname" placeholder="Nickname"/>
+        <input type="submit" value="Join">
+      </form>
+    </div>
+    <div id="onlineUsersContainer">
+      <h3>Online Users:</h3>
+      <ul id="onlineUsers"></ul>
+    </div>
+    <ul id="messages"></ul>
+    <form action="" id="messageForm">
+      <p id="isTyping"></p>
+      <input id="m" autocomplete="off" placeholder="Message..." /><button>Send</button>
+    </form>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+      var socket = io();
+      var thisUser;
+      //when the form is submitted, send a message
+      $('#messageForm').submit(function() {
+        socket.emit('chat message', {user: $('#nickname').val(), msg: $('#m').val()});
+        $('#m').val('');
+        return false;
+      });
+      //when a chat message is received, append li to #messages div
+      socket.on('chat message', function(msg) {
+        if (msg.msg === 'clear') {
+          $('#messages').html('');
+        } else {
+          $('#messages').append($('<li>').text(msg.user + ': ' + msg.msg));
+        }
+      });
+      //when a typing state message is received, show/hide in <span>
+      socket.on('typing state change', function(msg) {
+        if (msg.msg && msg.user !== '') {
+          $('#isTyping').append($('<span>').text(msg.user + ' is typing...'));
+        } else {
+          var stringToFind = msg.user + " is typing...";
+          $("span:contains('" + stringToFind + "')").remove();
+        }
+      });
+      var isTyping = false; //is the user currently typing?
+      var timeLastKeyPressed = Date.now(); //timestamp of last keypress
+      //on keypress, update timestamp of last keypress. ignore enter key as it's used to send a message from the form
+      $("#m").on('keypress', function(e) {
+        //ignore enter key
+        if (e.keyCode == 13) {
+          return;
+        }
+        timeLastKeyPressed = Date.now();
+      });
+      //check typing state every 100 milliseconds
+      var trackTyping = setInterval(function() {
+        var now = Date.now();
+        //if it's been a second or more since the last keypress - user is no longer typing - send a message
+        if (now - timeLastKeyPressed > 1000) {
+          isTyping = false;
+          socket.emit('typing state change', {user: $('#nickname').val(), msg: false});
+        } else {
+          //if the state is changing from false to true, send a message
+          if (!isTyping) {
+            socket.emit('typing state change', {user: $('#nickname').val(), msg: true});
+          }
+          isTyping = true;
+        }
+      }, 100);
+      //send a message when nickname form is submitted, hide the overlay
+      $('#nicknameForm').submit(function() {
+        socket.emit('user online', {user: $('#nickname').val(), online: true});
+        $('#modalForUser').hide();
+        return false;
+      });
+      //when user online message is received, show user as online
+      socket.on('user online', function(msg) {
+        if (msg.online) {
+          $('#onlineUsers').append($('<li>').text(msg.user));
+        } else {
+          $('#onlineUsers li:contains("' + msg.user + '")').remove();
+        }
+      });
+    </script>
+  </body>
+</html>
